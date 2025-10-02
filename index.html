@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Simulador FTTH - Sistema de Puertos</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="./css/styles.css">
+</head>
+<body>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sb-head">
+      <h1>🌐 Simulador FTTH - Sistema de Puertos</h1>
+      <div class="subtitle">Control individual de conexiones por puerto</div>
+    </div>
+
+    <div class="sb-body">
+      <div class="section-title">Configuración Base</div>
+
+      <div class="row2">
+        <div>
+          <label>Puertos PON (OLT)</label>
+          <input id="puertos" type="number" min="1" max="8" value="2"/>
+        </div>
+        <div>
+          <label>Límite ONTs por PON</label>
+          <select id="limitePON">
+            <option value="64">64</option>
+            <option value="128" selected>128</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div>
+          <label>Capacidad NAP</label>
+          <select id="capNAP">
+            <option value="4">4</option>
+            <option value="8" selected>8</option>
+            <option value="12">12</option>
+            <option value="16">16</option>
+          </select>
+        </div>
+        <div>
+          <label>Potencia TX OLT (dBm)</label>
+          <input id="txPower" type="number" value="3" step="0.5"/>
+        </div>
+      </div>
+
+      <div class="help">
+        <b>💡 Cómo funciona:</b>
+        <br>• Cada splitter muestra sus puertos disponibles
+        <br>• 🟢 Verde = Puerto usado | 🔴 Rojo = Puerto disponible
+        <br>• Selecciona el puerto para conectar siguiente elemento
+        <br>• Tipos: 1:2, 1:4, 1:8, 1:16, 1:32, 1:64
+      </div>
+
+      <div style="margin-top:12px;padding:10px;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px">
+        <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:12px">
+          <input type="checkbox" id="showPowerLabels" checked style="width:auto;margin:0">
+          <span>Mostrar etiquetas de potencia</span>
+        </label>
+        <label style="margin:8px 0 0 0;display:flex;align-items:center;gap:6px;font-size:12px">
+          <input type="checkbox" id="showPortNumbers" checked style="width:auto;margin:0">
+          <span>Mostrar números de puerto</span>
+        </label>
+        <label style="margin:8px 0 0 0;display:flex;align-items:center;gap:6px;font-size:12px">
+          <input type="checkbox" id="showUnusedPorts" checked style="width:auto;margin:0">
+          <span>Mostrar puertos sin usar</span>
+        </label>
+        <label style="margin:8px 0 0 0;display:flex;align-items:center;gap:6px;font-size:12px">
+          <input type="checkbox" id="enableDragging" style="width:auto;margin:0">
+          <span><b>🖱️ Modo edición: Arrastrar elementos</b></span>
+        </label>
+        <button id="resetPositions" class="btn-min" style="margin-top:8px;width:100%;background:#fef2f2;color:#991b1b;border-color:#fca5a5">🔄 Resetear posiciones</button>
+      </div>
+
+      <div class="section-title">Configuración por PON</div>
+      <div class="pon-tabs" id="ponTabs"></div>
+      <div id="ponContents"></div>
+
+      <button class="btn" id="generate">⚡ Generar Diagrama</button>
+
+      <div id="warn" class="warn" style="display:none"></div>
+
+      <div class="summary-box">
+        <h4>📊 Resumen Total</h4>
+        <div class="summary-grid" id="summaryGrid"></div>
+      </div>
+
+      <div class="section-title">Pérdidas por Rama</div>
+      <table id="lossTable">
+        <thead>
+          <tr>
+            <th>PON</th>
+            <th>Ruta</th>
+            <th>Pot.(dBm)</th>
+            <th>% Pot.</th>
+            <th>Nivel</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+
+      <div class="row2" style="margin-top:14px">
+        <button id="expSVG" class="btn-min">📥 SVG</button>
+        <button id="expPNG" class="btn-min">📥 PNG</button>
+      </div>
+    </div>
+  </aside>
+
+  <main class="canvas">
+    <button id="toggleFab" class="toggle-fab">☰</button>
+    <svg id="svg" width="2000" height="1200"></svg>
+  </main>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
