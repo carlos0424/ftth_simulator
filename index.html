@@ -8,6 +8,7 @@
 </head>
 <body>
 
+  <!-- Panel lateral -->
   <aside id="sidebar" class="sidebar">
     <div class="sb-head">
       <h1>🌐 Simulador FTTH - Sistema de Puertos</h1>
@@ -15,15 +16,16 @@
     </div>
 
     <div class="sb-body">
-      <div class="section-title">Configuración Base</div>
 
+      <!-- Configuración base -->
+      <div class="section-title">Configuración Base</div>
       <div class="row2">
         <div>
-          <label>Puertos PON (OLT)</label>
+          <label for="puertos">Puertos PON (OLT)</label>
           <input id="puertos" type="number" min="1" max="8" value="2"/>
         </div>
         <div>
-          <label>Límite ONTs por PON</label>
+          <label for="limitePON">Límite ONTs por PON</label>
           <select id="limitePON">
             <option value="64">64</option>
             <option value="128" selected>128</option>
@@ -33,7 +35,7 @@
 
       <div class="row2">
         <div>
-          <label>Capacidad NAP</label>
+          <label for="capNAP">Capacidad NAP</label>
           <select id="capNAP">
             <option value="4">4</option>
             <option value="8" selected>8</option>
@@ -42,7 +44,7 @@
           </select>
         </div>
         <div>
-          <label>Potencia TX OLT (dBm)</label>
+          <label for="txPower">Potencia TX OLT (dBm)</label>
           <input id="txPower" type="number" value="3" step="0.5"/>
         </div>
       </div>
@@ -55,26 +57,32 @@
         <br>• Tipos: 1:2, 1:4, 1:8, 1:16, 1:32, 1:64
       </div>
 
+      <hr class="section-divider">
+
+      <!-- Opciones de visualización -->
       <div style="margin-top:12px;padding:10px;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px">
-        <label style="margin:0;display:flex;align-items:center;gap:6px;font-size:12px">
-          <input type="checkbox" id="showPowerLabels" checked style="width:auto;margin:0">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px">
+          <input type="checkbox" id="showPowerLabels" checked>
           <span>Mostrar etiquetas de potencia</span>
         </label>
-        <label style="margin:8px 0 0 0;display:flex;align-items:center;gap:6px;font-size:12px">
-          <input type="checkbox" id="showPortNumbers" checked style="width:auto;margin:0">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px">
+          <input type="checkbox" id="showPortNumbers" checked>
           <span>Mostrar números de puerto</span>
         </label>
-        <label style="margin:8px 0 0 0;display:flex;align-items:center;gap:6px;font-size:12px">
-          <input type="checkbox" id="showUnusedPorts" checked style="width:auto;margin:0">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px">
+          <input type="checkbox" id="showUnusedPorts" checked>
           <span>Mostrar puertos sin usar</span>
         </label>
-        <label style="margin:8px 0 0 0;display:flex;align-items:center;gap:6px;font-size:12px">
-          <input type="checkbox" id="enableDragging" style="width:auto;margin:0">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px">
+          <input type="checkbox" id="enableDragging">
           <span><b>🖱️ Modo edición: Arrastrar elementos</b></span>
         </label>
         <button id="resetPositions" class="btn-min" style="margin-top:8px;width:100%;background:#fef2f2;color:#991b1b;border-color:#fca5a5">🔄 Resetear posiciones</button>
       </div>
 
+      <hr class="section-divider">
+
+      <!-- Configuración por PON -->
       <div class="section-title">Configuración por PON</div>
       <div class="pon-tabs" id="ponTabs"></div>
       <div id="ponContents"></div>
@@ -83,11 +91,15 @@
 
       <div id="warn" class="warn" style="display:none"></div>
 
+      <!-- Resumen -->
       <div class="summary-box">
         <h4>📊 Resumen Total</h4>
         <div class="summary-grid" id="summaryGrid"></div>
       </div>
 
+      <hr class="section-divider">
+
+      <!-- Tabla de pérdidas -->
       <div class="section-title">Pérdidas por Rama</div>
       <table id="lossTable">
         <thead>
@@ -103,15 +115,20 @@
       </table>
 
       <div class="row2" style="margin-top:14px">
-        <button id="expSVG" class="btn-min">📥 SVG</button>
-        <button id="expPNG" class="btn-min">📥 PNG</button>
+        <button id="expSVG" class="btn-min" title="Exportar a SVG">📥 SVG</button>
+        <button id="expPNG" class="btn-min" title="Exportar a PNG">📥 PNG</button>
       </div>
     </div>
   </aside>
 
+  <!-- Canvas principal -->
   <main class="canvas">
-    <button id="toggleFab" class="toggle-fab">☰</button>
-    <svg id="svg" width="2000" height="1200"></svg>
+    <button id="toggleFab" class="toggle-fab" title="Abrir/Cerrar configuración">☰</button>
+    <svg id="svg" viewBox="0 0 2000 1200" preserveAspectRatio="xMidYMid meet">
+      <text x="50%" y="50%" text-anchor="middle" fill="#9ca3af" font-size="20">
+        ⚡ Genera el diagrama desde el panel lateral
+      </text>
+    </svg>
   </main>
 
   <script type="module" src="./js/main.js"></script>

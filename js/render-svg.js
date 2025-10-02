@@ -1,4 +1,4 @@
-// render-svg.js
+// js/render-svg.js
 // Dibuja el árbol (un PON) en el <svg>, dejando el manejo de estado y layout a otros módulos.
 
 import { toPercent, splitterLoss, MIN_POWER, CONNECTOR_LOSS, SPLICE_LOSS } from './calc-loss.js';
@@ -9,35 +9,32 @@ import { createLine, createCircle, createText, drawRect, drawSplitterPolygon } f
  * @param {Object} cfg
  * @param {SVGSVGElement} cfg.svg
  * @param {number} cfg.ponIndex
- * @param {Array}  cfg.tree                // nodos de ese PON
+ * @param {Array}  cfg.tree
  * @param {Map}    cfg.positions           // nodeId -> {x,y,depth}
- * @param {Object} cfg.opts                // flags y parámetros de potencia
- * @param {Function} cfg.onNodeGroupReady  // callback para registrar conexiones (drag)
- * @param {Function} cfg.addLossRow        // callback para tabla de pérdidas
+ * @param {Object} cfg.opts
+ * @param {Function} cfg.onNodeGroupReady
+ * @param {Function} cfg.addLossRow
  */
 export function renderSVG({ svg, ponIndex, tree, positions, opts, onNodeGroupReady, addLossRow }) {
-  // Limpieza parcial: el caller puede limpiar todo el SVG si quiere.
-  // Aquí solo dibujamos el contenido de este PON.
   const {
     startX = 250,
     laneMid = 400,
     hubX = 210,
-    oltX = 20,
     txPower = 3,
     capNAP = 8,
     showPowerLabels = true,
     showPortNumbers = true,
-    showUnusedPorts = true
+    showUnusedPorts = true,
+    napCompact = { lineLen: 16, spacing: 12, offsetX: 90 }
   } = opts || {};
 
-  // Hub (etiqueta PON)
+  // etiqueta PON (visual, no “hub”)
   drawRect(svg, hubX - 36, laneMid - 12, 60, 24, 6, 'var(--hub)', `PON${ponIndex + 1}`);
 
-  // Conexiones por nodo para que drag.js las actualice
-  // Estructura: key "pon{idx}-node{id}" -> { inputLine, outputLines[], unusedPorts[], powerLabel, portLabel }
+  // Conexiones por nodo: { inputLine, outputLines[], unusedPorts[], powerLabel, portLabel }
   const connectionLines = {};
 
-  // Map rápido de hijos por padre
+  // hijos por padre
   const childrenByParent = new Map();
   tree.forEach(n => {
     if (n.parentId != null) {
@@ -47,25 +44,24 @@ export function renderSVG({ svg, ponIndex, tree, positions, opts, onNodeGroupRea
     }
   });
 
-  // Renderizar raíces
+  // raíces
   tree.filter(n => n.parentId == null).forEach(root => {
     drawNodeRecursive({
       node: root,
       parentX: hubX + 24,
       parentY: laneMid,
       depth: 0,
-      powerIn: txPower,
-      connectionLines,
+      powerIn: txPower
     });
   });
 
   // ——— funciones locales ———
 
-  function drawNodeRecursive({ node, parentX, parentY, depth, powerIn, connectionLines }) {
+  function drawNodeRecursive({ node, parentX, parentY, depth, powerIn }) {
     const pos = positions.get(node.id) || { x: startX + depth * 250, y: laneMid };
     const nodeKey = `pon${ponIndex}-node${node.id}`;
 
-    // Grupo contenedor (para drag)
+    // Grupo contenedor
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     g.setAttribute('id', `group-${nodeKey}`);
     g.setAttribute('data-draggable', 'true');
@@ -74,11 +70,11 @@ export function renderSVG({ svg, ponIndex, tree, positions, opts, onNodeGroupRea
     g.style.cursor = 'grab';
     svg.appendChild(g);
 
-    // Linea de entrada desde el padre
+    // Línea de entrada (recta, sin “codos” fijos)
     const inLine = createLine(parentX, parentY, pos.x, pos.y + 12);
     svg.appendChild(inLine);
 
-    // Etiqueta del puerto padre (si aplica)
+    // Etiqueta de puerto padre
     let portLbl = null;
     if (showPortNumbers && node.parentPort) {
       const midX = (parentX + pos.x) / 2;
@@ -89,61 +85,55 @@ export function renderSVG({ svg, ponIndex, tree, positions, opts, onNodeGroupRea
       svg.appendChild(portLbl);
     }
 
-    // Inicializa estructura para este nodo
+    // registrar referencias
     connectionLines[nodeKey] = { inputLine: inLine, outputLines: [], unusedPorts: [], powerLabel: null, portLabel: portLbl };
 
     if (node.type === 'splitter') {
-      // Pérdidas del splitter
+      // pérdidas
       const loss = splitterLoss(node.ratio);
       const powerOut = powerIn - loss - SPLICE_LOSS;
 
-      // Dibujo del triángulo y etiquetas
+      // triángulo + etiquetas
       drawSplitterPolygon(g, 0, 0, `1:${node.ratio}`, node.name);
-
       if (showPowerLabels) {
         const pcent = toPercent(powerOut);
         const lbl = createText(40, 12, `${powerOut.toFixed(1)}dBm (${pcent}%)`, '#059669', 9);
         g.appendChild(lbl);
         connectionLines[nodeKey].powerLabel = lbl;
       }
-
-      // Registrar en tabla de pérdidas
       addLossRow?.(ponIndex + 1, `${node.name}`, powerOut, toPercent(powerOut), depth);
 
-      // Puertos del splitter
+      // puertos
       const portSpacing = 25;
       const startPortY = 12 - ((node.ratio - 1) * portSpacing) / 2;
 
       const kids = childrenByParent.get(node.id) || [];
       for (let i = 1; i <= node.ratio; i++) {
         const portY = startPortY + (i - 1) * portSpacing;
-        const portX = 50;
 
         const child = kids.find(k => k.parentPort === i);
         if (child) {
-          // Línea corta de salida y recursión con el hijo
-          const outLine = createLine(pos.x + 50, pos.y + portY, pos.x + portX, pos.y + portY);
+          // segmento corto de salida
+          const outLine = createLine(pos.x + 50, pos.y + portY, pos.x + 70, pos.y + portY);
           svg.appendChild(outLine);
-          connectionLines[nodeKey].outputLines.push({ line: outLine, portOffset: portY });
 
+          connectionLines[nodeKey].outputLines.push({ line: outLine, portOffset: portY });
+          // hijo
           drawNodeRecursive({
             node: child,
-            parentX: pos.x + portX,
+            parentX: pos.x + 70,
             parentY: pos.y + portY,
             depth: depth + 1,
-            powerIn: powerOut,
-            connectionLines
+            powerIn: powerOut
           });
         } else if (showUnusedPorts) {
-          // Puerto sin usar (línea corta + círculo y opcional etiqueta P#)
-          const uLine = createLine(pos.x + 50, pos.y + portY, pos.x + portX + 20, pos.y + portY);
-          const uCircle = createCircle(pos.x + portX + 20, pos.y + portY, 3, '#ef4444', '#dc2626', 1.5);
+          const uLine   = createLine(pos.x + 50, pos.y + portY, pos.x + 70, pos.y + portY);
+          const uCircle = createCircle(pos.x + 70, pos.y + portY, 3, '#ef4444', '#dc2626', 1.5);
           svg.appendChild(uLine);
           svg.appendChild(uCircle);
-
           const info = { line: uLine, circle: uCircle, portOffset: portY };
           if (showPortNumbers) {
-            const t = createText(pos.x + portX + 35, pos.y + portY + 4, `P${i}`, '#dc2626', 8);
+            const t = createText(pos.x + 85, pos.y + portY + 4, `P${i}`, '#dc2626', 8);
             svg.appendChild(t);
             info.text = t;
           }
@@ -151,16 +141,13 @@ export function renderSVG({ svg, ponIndex, tree, positions, opts, onNodeGroupRea
         }
       }
 
-      // Notificar al manejador (drag.js) para registrar este grupo/nodo
       onNodeGroupReady?.(node, g, connectionLines[nodeKey]);
-
     } else {
-      // NAP: tratamos ratio como número de ONTs “dist”
+      // NAP compacta (sin iconos ONT)
       const loss = splitterLoss(node.ratio);
       const powerONT = powerIn - loss - CONNECTOR_LOSS;
 
       drawSplitterPolygon(g, 0, 0, `1:${node.ratio}`, 'Dist');
-
       const powerColor = powerONT < MIN_POWER ? '#dc2626' : (powerONT < -20 ? '#f59e0b' : '#059669');
       const pcent = toPercent(powerONT);
 
@@ -170,49 +157,47 @@ export function renderSVG({ svg, ponIndex, tree, positions, opts, onNodeGroupRea
         connectionLines[nodeKey].powerLabel = lbl;
       }
 
-      // Pintar NAP(s) y ONTs adyacentes
-      drawNAPandONTs(svg, pos.x + 130, pos.y + 12, node.ratio, capNAP, node.name);
+      drawCompactNAP(g, pos.x + (napCompact.offsetX ?? 90), pos.y + 12, node.ratio, capNAP, napCompact, node.name);
 
       addLossRow?.(ponIndex + 1, `${node.name} → ${node.ratio} ONTs`, powerONT, pcent, depth);
-
       onNodeGroupReady?.(node, g, connectionLines[nodeKey]);
     }
   }
 }
 
-/** Dibuja NAPs y ONTs a la derecha del nodo actual */
-function drawNAPandONTs(svg, x, yMid, count, cap, napLabel) {
-  const h = 22;
-  let rest = count, y = yMid - (count * h) / 2;
+/** NAP compacta dentro del mismo <g> (se mueve toda junta) */
+function drawCompactNAP(group, x, yMid, count, cap, conf, napLabel){
+  const spacing = conf.spacing ?? 12;
+  const lineLen = conf.lineLen ?? 16;
+
+  let rest = count;
+  let y = yMid - (count * spacing) / 2;
   let napIndex = 1;
 
-  while (rest > 0) {
+  while (rest > 0){
     const enNAP = Math.min(cap, rest);
-    const napY = y + (enNAP * h) / 2 - 12;
+    const napY = y + (enNAP * spacing) / 2 - 12;
 
-    drawRect(svg, x - 90, napY, 80, 24, 6, 'var(--nap)', `${napLabel} #${napIndex}`);
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('x', String(x - 70));
+    rect.setAttribute('y', String(napY));
+    rect.setAttribute('width', '60');
+    rect.setAttribute('height', '24');
+    rect.setAttribute('rx', '6');
+    rect.setAttribute('fill', 'var(--nap)');
+    group.appendChild(rect);
 
-    for (let i = 0; i < enNAP; i++) {
-      const oy = y + i * h + h / 2;
-      svg.appendChild(createLine(x - 10, napY + 12, x - 10, oy));
-      svg.appendChild(createLine(x - 10, oy, x - 4, oy));
+    const label = createText(x - 40, napY + 15, `${napLabel} #${napIndex}`, '#fff', 10);
+    label.setAttribute('text-anchor', 'middle');
+    group.appendChild(label);
 
-      // cajitas ONT
-      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      rect.setAttribute('x', String(x + 8));
-      rect.setAttribute('y', String(oy - 7));
-      rect.setAttribute('width', '46');
-      rect.setAttribute('height', '14');
-      rect.setAttribute('rx', '3');
-      rect.setAttribute('fill', 'var(--ont)');
-      svg.appendChild(rect);
-
-      const label = createText(x + 31, oy + 3, 'ONT', '#fff', 8);
-      label.setAttribute('text-anchor', 'middle');
-      svg.appendChild(label);
+    for (let i=0; i<enNAP; i++){
+      const oy = y + i*spacing + spacing/2;
+      group.appendChild(createLine(x - 10, napY + 12, x - 10, oy));
+      group.appendChild(createLine(x - 10, oy, x - 10 + lineLen, oy));
     }
 
-    y += enNAP * h + 10;
+    y += enNAP * spacing + 10;
     rest -= enNAP;
     napIndex++;
   }

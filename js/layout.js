@@ -1,6 +1,7 @@
 // layout.js
 // Calcula posiciones (x,y) para cada nodo de un PON en función de su profundidad.
-// Respeta posiciones personalizadas si existen en nodePositions.
+// Respeta posiciones personalizadas si existen en nodePositions por PON:
+// clave: "pon{ponIndex}-node{nodeId}"
 
 export function getNodeDepth(tree, nodeId) {
   const n = tree.find(x => x.id === nodeId);
@@ -10,16 +11,17 @@ export function getNodeDepth(tree, nodeId) {
 
 /**
  * Devuelve un Map nodeId -> {x,y,depth}
- * @param {Array} tree           Nodos del PON
- * @param {Object} nodePositions Posiciones personalizadas { "pon{i}-node{id}": {x,y} } (opcional)
- * @param {Object} opts          { startX, laneTop, padX }
+ * @param {number} ponIndex                Índice del PON (para namespacing)
+ * @param {Array}  tree                    Nodos del PON
+ * @param {Object} nodePositions           { "pon{i}-node{id}": {x,y} } (opcional)
+ * @param {Object} opts                    { startX, laneTop, padX }
  */
-export function computeLayout(tree, nodePositions = {}, opts = {}) {
+export function computeLayout(ponIndex, tree, nodePositions = {}, opts = {}) {
   const startX = opts.startX ?? 250;
   const laneTop = opts.laneTop ?? 40;
   const padX = opts.padX ?? 250;
 
-  // agrupamos hijos
+  // hijos agrupados por padre
   const childrenByParent = new Map();
   tree.forEach(n => {
     if (n.parentId != null) {
@@ -29,7 +31,6 @@ export function computeLayout(tree, nodePositions = {}, opts = {}) {
     }
   });
 
-  // orden de y: vamos “reservando” slots verticales
   let yCursor = laneTop + 60;
   const positions = new Map();
 
@@ -40,16 +41,12 @@ export function computeLayout(tree, nodePositions = {}, opts = {}) {
   return positions;
 
   function placeSubtree(node, depth = getNodeDepth(tree, node.id)) {
-    const key = `node${node.id}`; // clave local (nodePositions viene con prefijo de PON, el caller ajusta)
-    // si hay posición personalizada, no la recalculamos
-    const hasCustom = Object.values(nodePositions).some(p => p && typeof p.x === 'number');
-    if (!hasCustom) {
-      const x = startX + depth * padX;
-      const y = yCursor;
-      positions.set(node.id, { x, y, depth });
-      yCursor += 80;
+    const key = `pon${ponIndex}-node${node.id}`;
+    const custom = nodePositions[key];
+
+    if (custom && Number.isFinite(custom.x) && Number.isFinite(custom.y)) {
+      positions.set(node.id, { x: custom.x, y: custom.y, depth });
     } else {
-      // el caller actualizará luego usando nodePositions reales
       const x = startX + depth * padX;
       const y = yCursor;
       positions.set(node.id, { x, y, depth });

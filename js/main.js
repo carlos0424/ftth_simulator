@@ -1,17 +1,23 @@
-// main.js
+// js/main.js
 // Orquestación: UI del panel, estado, layout y render del SVG.
+// Versión con fixes:
+//  - Drag actualiza también el punto de inicio de la línea del hijo (sin “codos” fijos).
+//  - Namespacing de posiciones por PON (no se pisan entre PON).
+//  - Sin datos de ejemplo al cargar (el usuario construye desde cero).
 
 import { computeLayout, getNodeDepth } from './layout.js';
 import { renderSVG } from './render-svg.js';
 import { enableDragging } from './drag.js';
 import { exportSVG, exportPNG } from './export.js';
 import { summarize, validateOntsPerPon, MAX_ONTS_PER_PON_DEFAULT } from './rules.js';
-import { SPLICE_LOSS, CONNECTOR_LOSS, MIN_POWER, MAX_POWER } from './calc-loss.js';
+import { MIN_POWER } from './calc-loss.js';
 
 // ======== ESTADO =========
 let currentPON = 0;
 let ponConfigs = {};        // { [ponIndex]: { nodes: Node[] } }
 let nextNodeId = 0;
+
+// Drag / posiciones personalizadas y referencias a líneas
 let nodePositions = {};     // { "pon{i}-node{id}": {x,y} }
 let connections = {};       // { "pon{i}-node{id}": { inputLine, outputLines[], unusedPorts[], powerLabel, portLabel } }
 
@@ -24,7 +30,9 @@ const warn = document.getElementById('warn');
 const summaryGrid = document.getElementById('summaryGrid');
 
 // ======== EVENTOS GENERALES =========
-document.getElementById('toggleFab').onclick = () => document.getElementById('sidebar').classList.toggle('collapsed');
+document.getElementById('toggleFab').onclick = () =>
+  document.getElementById('sidebar').classList.toggle('collapsed');
+
 document.getElementById('puertos').addEventListener('change', initPONs);
 document.getElementById('generate').onclick = generateAll;
 document.getElementById('expSVG').onclick = () => exportSVG(svg);
@@ -38,9 +46,10 @@ document.getElementById('enableDragging').addEventListener('change', (e) => {
   if (enabled && !dragEnabled) {
     attachDrag();
   } else if (!enabled && dragEnabled) {
-    detachDrag();
+    detachDrag(); // simplemente regeneramos sin listeners de drag
   }
 });
+
 document.getElementById('resetPositions').addEventListener('click', () => {
   if (confirm('¿Resetear todas las posiciones personalizadas?')) {
     nodePositions = {};
@@ -51,22 +60,29 @@ document.getElementById('resetPositions').addEventListener('click', () => {
 
 // ======== DRAG =========
 let dragEnabled = false;
-let dragDetachFn = null;
 
 function attachDrag() {
+  // Conecta los listeners al SVG actual
   enableDragging(svg, {
     getConnByNodeKey: key => connections[key],
     onMove: (nodeKey, nx, ny, conn) => {
       nodePositions[nodeKey] = { x: nx, y: ny };
-      // actualizar líneas vinculadas
+
+      // actualizar líneas vinculadas a este nodo
       if (conn?.inputLine) {
         conn.inputLine.setAttribute('x2', nx);
         conn.inputLine.setAttribute('y2', ny + 12);
       }
       if (conn?.outputLines?.length) {
         conn.outputLines.forEach(info => {
+          // salida corta del padre
           info.line.setAttribute('x1', nx + 50);
           info.line.setAttribute('y1', ny + info.portOffset);
+          // 🔧 mover el inicio de la inputLine del hijo para evitar “codos” fijos
+          if (info.childInLine) {
+            info.childInLine.setAttribute('x1', nx + 70);
+            info.childInLine.setAttribute('y1', ny + info.portOffset);
+          }
         });
       }
       if (conn?.unusedPorts?.length) {
@@ -95,26 +111,20 @@ function attachDrag() {
 }
 
 function detachDrag() {
-  // No hay un “remove” directo: basta con recargar el SVG y no volver a registrar eventos.
-  svg.replaceWith(svg.cloneNode(true));
-  const newSvg = document.getElementById('svg');
-  Object.assign(svg, newSvg); // mantener ref local abstractamente
+  // Para “quitar” listeners del SVG añadidos por enableDragging,
+  // regeneramos el SVG y NO volvemos a llamar a attachDrag.
+  const wasChecked = document.getElementById('enableDragging').checked;
+  document.getElementById('enableDragging').checked = false;
   dragEnabled = false;
+  generateAll();
+  // restaurar estado del checkbox visualmente (pero sin listeners)
+  document.getElementById('enableDragging').checked = wasChecked;
 }
 
 // ======== INICIALIZACIÓN =========
 window.addEventListener('load', () => {
-  initPONs();
-
-  // Bootstrap de ejemplo (igual a tu inline)
-  const rootId = addNode(0, null, 0, { type: 'splitter', ratio: 4, name: 'Split Principal' });
-  addNode(0, rootId, 1, { type: 'nap', ratio: 8, name: 'Zona A' });
-  addNode(0, rootId, 2, { type: 'splitter', ratio: 2, name: 'Split Secundario' });
-
-  const secId = ponConfigs[0].nodes.find(n => n.name === 'Split Secundario').id;
-  addNode(0, secId, 1, { type: 'nap', ratio: 16, name: 'Zona B' });
-
-  generateAll();
+  initPONs();      // sin nodos por defecto
+  generateAll();   // lienzo vacío con OLT/hubs según N PONs
   if (document.getElementById('enableDragging').checked) attachDrag();
 });
 
@@ -232,26 +242,26 @@ function renderNodeTree(ponIndex, node, container, depth) {
     generateAll();
   };
 
-  nodeDiv.querySelector('.delete-node-btn').onclick = () => { deleteNode(ponIndex, node.id); };
+  nodeDiv.querySelector('.delete-node-btn').onclick = () => { deleteNode(ponIndex, node.id); renderPON(ponIndex); generateAll(); };
 
   if (node.type === 'splitter') {
     updatePortsDisplay(ponIndex, node);
 
     const portSelect = nodeDiv.querySelector('.port-select');
     const connectSplit = nodeDiv.querySelector('.connect-split');
-    const connectNap = nodeDiv.querySelector('.connect-nap');
+    const connectNap   = nodeDiv.querySelector('.connect-nap');
 
     connectSplit.onclick = () => {
       const port = +portSelect.value;
       if (!port) return alert('Selecciona un puerto disponible');
-      addNode(ponIndex, node.id, port, { type: 'splitter', ratio: 2, name: `Split P${port}` });
+      addNode(ponIndex, node.id, port, { type: 'splitter', ratio: 2, name: `Nuevo Splitter` });
       renderPON(ponIndex);
       generateAll();
     };
     connectNap.onclick = () => {
       const port = +portSelect.value;
       if (!port) return alert('Selecciona un puerto disponible');
-      addNode(ponIndex, node.id, port, { type: 'nap', ratio: 8, name: `NAP P${port}` });
+      addNode(ponIndex, node.id, port, { type: 'nap', ratio: 8, name: `Zona #${port}` });
       renderPON(ponIndex);
       generateAll();
     };
@@ -278,8 +288,7 @@ function updatePortsDisplay(ponIndex, node) {
 
     if (!port.used) {
       const opt = document.createElement('option');
-      opt.value = i;
-      opt.textContent = `Puerto ${i}`;
+      opt.value = i; opt.textContent = `Puerto ${i}`;
       portSelect.appendChild(opt);
     }
   }
@@ -287,6 +296,8 @@ function updatePortsDisplay(ponIndex, node) {
 
 // ======== MUTACIONES DE ESTADO =========
 function addNode(ponIndex, parentId, parentPort, config) {
+  if (!ponConfigs[ponIndex]) ponConfigs[ponIndex] = { nodes: [] };
+
   const nodeId = nextNodeId++;
   const node = {
     id: nodeId,
@@ -330,8 +341,6 @@ function deleteNode(ponIndex, nodeId) {
     toDelete.push(...children.map(n => n.id));
   }
   ponConfigs[ponIndex].nodes = ponConfigs[ponIndex].nodes.filter(n => !toDelete.includes(n.id));
-  renderPON(ponIndex);
-  generateAll();
 }
 
 // ======== GENERACIÓN COMPLETA (todas las PON) =========
@@ -385,28 +394,27 @@ function generateAll() {
     svg.insertAdjacentHTML('beforeend', `<circle cx="${xOLT + 40}" cy="${pinY}" r="4" fill="#fff" stroke="#0b3d63" stroke-width="2"/>`);
     svg.insertAdjacentHTML('beforeend', `<line x1="${xOLT + 40}" y1="${pinY}" x2="${xHub - 18}" y2="${laneMid}" stroke="var(--line)" stroke-width="2.5"/>`);
 
-    // Si no hay nodos en este PON, solo mostramos el hub
+    // hub PON
     svg.insertAdjacentHTML('beforeend',
       `<rect x="${xHub - 36}" y="${laneMid - 12}" width="60" height="24" rx="6" fill="var(--hub)"/>
        <text x="${xHub - 6}" y="${laneMid + 4}" fill="#fff" text-anchor="middle" font-size="10">PON${p + 1}</text>`);
 
     if (!ponConfigs[p] || ponConfigs[p].nodes.length === 0) continue;
 
-    // Layout base (se ajusta más abajo con nodePositions si aplica)
-    const layout = computeLayout(ponConfigs[p].nodes, nodePositions, { startX: xHub + 24, laneTop, padX });
+    // Layout base por PON (namespacing correcto para posiciones personalizadas)
+    const layout = computeLayout(p, ponConfigs[p].nodes, nodePositions, { startX: xHub + 24, laneTop, padX });
 
-    // callback para registrar referencias de líneas de cada nodo (drag)
+    // callback: registrar refs para drag
     const onNodeGroupReady = (node, group, connRefs) => {
       const key = `pon${p}-node${node.id}`;
       connections[key] = connRefs;
-      // si hay posición custom, aplicarla
       if (nodePositions[key]) {
         const { x, y } = nodePositions[key];
         group.setAttribute('transform', `translate(${x},${y})`);
       }
     };
 
-    // callback para tabla de pérdidas
+    // callback: tabla pérdidas
     const addLossRow = (ponNum, path, power, percent, level) => {
       const tr = document.createElement('tr');
       const color = power < MIN_POWER ? '#dc2626' : (power < -20 ? '#f59e0b' : '#16a34a');
@@ -420,7 +428,7 @@ function generateAll() {
       lossBody.appendChild(tr);
     };
 
-    // Render PON p
+    // Render PON p (NAP compacta configurada)
     renderSVG({
       svg,
       ponIndex: p,
@@ -430,12 +438,12 @@ function generateAll() {
         startX: xHub + 24,
         laneMid,
         hubX: xHub,
-        oltX: xOLT,
         txPower,
         capNAP,
         showPowerLabels,
         showPortNumbers,
-        showUnusedPorts
+        showUnusedPorts,
+        napCompact: { lineLen: 18, spacing: 14, offsetX: 90 }
       },
       onNodeGroupReady,
       addLossRow
@@ -448,7 +456,6 @@ function generateAll() {
   const lim = +val('limitePON') || MAX_ONTS_PER_PON_DEFAULT;
   const { perPon, okGlobal } = validateOntsPerPon(ponConfigs, lim);
 
-  // Mostrar advertencia si cualquier PON supera el límite
   const firstBad = perPon.find(v => v > lim);
   warn.style.display = firstBad ? 'block' : 'none';
   if (firstBad) {
