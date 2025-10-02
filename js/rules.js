@@ -1,13 +1,9 @@
 // rules.js
-// Reglas de negocio (capacidad, conteos, validaciones simples)
+// Reglas de negocio (capacidad, conteos, validaciones según teoría GPON)
 
 export const MAX_ONTS_PER_PON_DEFAULT = 128;
-export const MAX_SPLIT_DEPTH_DEFAULT = 3;
+export const MAX_SPLIT_DEPTH = 3; // Máximo 3 niveles de spliteo según teoría GPON
 
-/**
- * Cuenta elementos globales.
- * Devuelve { totalONTs, totalNAPs, totalSplitters, totalPorts, usedPorts }
- */
 export function summarize(ponConfigs, capNAP = 8) {
   let totalONTs = 0,
       totalNAPs = 0,
@@ -22,7 +18,6 @@ export function summarize(ponConfigs, capNAP = 8) {
         totalPorts += n.ratio;
         usedPorts += Object.values(n.ports || {}).filter(p => p.used).length;
       } else {
-        // NAP: usamos ratio como cantidad de ONTs
         totalONTs += n.ratio;
         totalNAPs += Math.ceil(n.ratio / capNAP);
       }
@@ -32,22 +27,7 @@ export function summarize(ponConfigs, capNAP = 8) {
   return { totalONTs, totalNAPs, totalSplitters, totalPorts, usedPorts };
 }
 
-/**
- * Valida límite de ONTs y niveles por PON.
- * Devuelve:
- * {
- *   perPon: number[],        // cantidad de ONTs por PON
- *   perDepth: number[],      // profundidad máxima encontrada en cada PON
- *   limitONTs,               // límite de ONTs
- *   limitDepth,              // límite de profundidad
- *   okGlobal: boolean
- * }
- */
-export function validateOntsPerPon(
-  ponConfigs,
-  limitONTs = MAX_ONTS_PER_PON_DEFAULT,
-  limitDepth = MAX_SPLIT_DEPTH_DEFAULT
-) {
+export function validateOntsPerPon(ponConfigs, limitONTs = MAX_ONTS_PER_PON_DEFAULT) {
   const perPon = [];
   const perDepth = [];
   let okGlobal = true;
@@ -60,23 +40,43 @@ export function validateOntsPerPon(
       if (n.type !== 'splitter') countONTs += n.ratio;
     });
 
-    // calcular profundidad máxima del PON
     const maxDepth = countDepth(cfg?.nodes || []);
     perPon[ponIdx] = countONTs;
     perDepth[ponIdx] = maxDepth;
 
-    if (countONTs > limitONTs || maxDepth > limitDepth) {
+    if (countONTs > limitONTs) {
       okGlobal = false;
     }
   });
 
-  return { perPon, perDepth, limitONTs, limitDepth, okGlobal };
+  return { perPon, perDepth, limitONTs, okGlobal };
 }
 
-/**
- * Calcula la profundidad máxima de un conjunto de nodos
- */
+export function validateSplitDepth(ponConfigs, limit = MAX_SPLIT_DEPTH) {
+  const violations = [];
+  
+  Object.keys(ponConfigs).forEach(ponIdx => {
+    const cfg = ponConfigs[ponIdx];
+    const maxDepth = countDepth(cfg?.nodes || []);
+    
+    if (maxDepth > limit) {
+      violations.push({
+        ponIndex: parseInt(ponIdx),
+        maxDepth,
+        limit
+      });
+    }
+  });
+  
+  return {
+    ok: violations.length === 0,
+    violations
+  };
+}
+
 function countDepth(nodes) {
+  if (!nodes || nodes.length === 0) return 0;
+  
   const byId = new Map(nodes.map(n => [n.id, n]));
   const childrenByParent = new Map();
   nodes.forEach(n => {
@@ -93,8 +93,9 @@ function countDepth(nodes) {
     return 1 + Math.max(...kids.map(k => depth(k.id)));
   }
 
-  // buscar raíces
   const roots = nodes.filter(n => n.parentId == null);
+  if (roots.length === 0) return 0;
+  
   let max = 0;
   roots.forEach(r => { max = Math.max(max, depth(r.id)); });
   return max;

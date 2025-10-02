@@ -69,3 +69,27 @@ function toSvgPoint(svg, cx, cy) {
   p.y = cy;
   return p.matrixTransform(svg.getScreenCTM().inverse());
 }
+// Dentro de la sección de splitters, cambia:
+const child = kids.find(k => k.parentPort === i);
+if (child) {
+  // Segmento corto de salida
+  const outLine = createLine(pos.x + 50, pos.y + portY, pos.x + 70, pos.y + portY);
+  svg.appendChild(outLine);
+
+  // Guardar referencia incluyendo childKey para actualización
+  const childKey = `pon${ponIndex}-node${child.id}`;
+  connectionLines[nodeKey].outputLines.push({ 
+    line: outLine, 
+    portOffset: portY,
+    childKey: childKey  // ← IMPORTANTE: agregar esta línea
+  });
+
+  // Renderizar hijo
+  drawNodeRecursive({
+    node: child,
+    parentX: pos.x + 70,
+    parentY: pos.y + portY,
+    depth: depth + 1,
+    powerIn: powerOut
+  });
+}

@@ -166,3 +166,37 @@ text{font-weight:700; font-size:10px; user-select:none}
   gap:8px;
   line-height:1.2;
 }
+.btn-min:disabled{
+  opacity:0.5; 
+  cursor:not-allowed; 
+  background:#f3f4f6;
+}
+
+.pon-content{
+  display:none;
+}
+
+.pon-content.active{
+  display:block;
+}
+
+.section-divider{
+  border:none; 
+  border-top:1px solid #e5e9f2; 
+  margin:16px 0;
+}
+
+/* ===== Checkboxes del panel de visualización ===== */
+.sb-body input[type="checkbox"]{
+  width:auto;
+  margin:0;
+  vertical-align:middle;
+}
+
+.sb-body label[style*="display:flex"]{
+  margin-top:8px;
+}
+
+.sb-body label[style*="display:flex"] input[type="checkbox"]{
+  flex-shrink:0;
+}
